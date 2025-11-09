@@ -1,55 +1,53 @@
+# ==============================================================
+# APP: Aplicativo de Escoragem de Crédito
+# Autor: João Paulo Costa
+# Projeto Final EBAC × Semantix
+# ==============================================================
+
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from pycaret.classification import predict_model
+from pycaret.classification import load_model, predict_model
 
 
+# ==============================================================
 # Configurações da página
+# ==============================================================
 st.set_page_config(page_title="Score de Crédito", page_icon="💳", layout="wide")
 st.title("💳 Aplicativo de Escoragem de Crédito")
 st.caption("Utilize este app para escorar novas bases com o modelo treinado (`model_final.pkl`).")
 
 
+# ==============================================================
 # Funções auxiliares
+# ==============================================================
 @st.cache_resource
 def carregar_modelo(caminho_modelo: str):
-    """Carrega o modelo treinado."""
-    modelo = joblib.load(caminho_modelo)
+    """
+    Carrega o modelo salvo pelo PyCaret (sem precisar da extensão .pkl).
+    """
+    modelo = load_model(caminho_modelo.replace(".pkl", ""))  # PyCaret busca o nome base
     return modelo
+
 
 @st.cache_data
 def carregar_csv(arquivo):
-    """Carrega arquivo CSV enviado pelo usuário."""
-    df = pd.read_csv(arquivo)
-    return df
-
-def preprocessar_dados(df: pd.DataFrame):
-    """Pipeline simples de pré-processamento."""
-    # Exemplo: separa colunas numéricas e categóricas
-    num_cols = df.select_dtypes(include=np.number).columns.tolist()
-    cat_cols = [c for c in df.columns if c not in num_cols]
-
-    num_tf = Pipeline(steps=[("scaler", StandardScaler())])
-    cat_tf = Pipeline(steps=[("ohe", OneHotEncoder(handle_unknown="ignore", sparse_output=False))])
-
-    pre = ColumnTransformer(
-        transformers=[("num", num_tf, num_cols), ("cat", cat_tf, cat_cols)],
-        remainder="drop"
-    )
-
-    X_prep = pre.fit_transform(df)
-    return X_prep, pre
+    """
+    Lê o arquivo CSV enviado pelo usuário.
+    """
+    return pd.read_csv(arquivo)
 
 
-# Upload de arquivo
+# ==============================================================
+# Interface principal
+# ==============================================================
 st.sidebar.header("📂 Upload de Base")
 arquivo_csv = st.sidebar.file_uploader("Envie um arquivo CSV", type=["csv"])
 
-modelo_path = "model_final.pkl"  # caminho do modelo treinado
+# Nome do modelo salvo
+modelo_path = "model_final"
+
+# Carrega o modelo
 modelo = carregar_modelo(modelo_path)
 
 if arquivo_csv is not None:
@@ -57,24 +55,17 @@ if arquivo_csv is not None:
     st.write("### 🧾 Amostra da base carregada:")
     st.dataframe(df.head())
 
-    # Pré-processar e escorar
     with st.spinner("⚙️ Processando e escorando a base..."):
-        X_prep, _ = preprocessar_dados(df)
-        if hasattr(modelo, "predict_proba"):
-            resultados = predict_model(modelo, data=df, verbose=False)
-            st.dataframe(resultados.head())
-        else:
-            proba = modelo.predict(X_prep)
+        # Realiza a escoragem usando o pipeline completo do PyCaret
+        resultados = predict_model(modelo, data=df, verbose=False)
 
-        resultados = df.copy()
-        resultados["score"] = proba
-        resultados["classificacao"] = np.where(resultados["score"] >= 0.5, "Aprovado", "Reprovado")
-
-    st.success("✅ Escoragem concluída!")
+    st.success("✅ Escoragem concluída com sucesso!")
     st.write("### 🔍 Amostra das previsões:")
     st.dataframe(resultados.head())
 
-    # Baixar resultados
+    # ==============================================================
+    # Botão para download dos resultados
+    # ==============================================================
     csv = resultados.to_csv(index=False, encoding="utf-8-sig")
     st.download_button(
         label="📥 Baixar resultados (CSV)",
@@ -85,6 +76,3 @@ if arquivo_csv is not None:
 
 else:
     st.info("Envie um arquivo CSV para iniciar a escoragem.")
-
-
-
