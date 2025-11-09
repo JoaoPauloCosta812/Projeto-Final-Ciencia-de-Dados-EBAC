@@ -61,7 +61,7 @@ if arquivo_csv is not None:
     with st.spinner("⚙️ Processando e escorando a base..."):
         X_prep, _ = preprocessar_dados(df)
         if hasattr(modelo, "predict_proba"):
-            resultados = predict_model(modelo, data=df)
+            resultados = predict_model(modelo, data=df, verbose=False)
             st.dataframe(resultados.head())
         else:
             proba = modelo.predict(X_prep)
@@ -85,5 +85,6 @@ if arquivo_csv is not None:
 
 else:
     st.info("Envie um arquivo CSV para iniciar a escoragem.")
+
 
 
