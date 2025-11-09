@@ -5,17 +5,16 @@ import joblib
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
+from pycaret.classification import predict_model
 
-# -----------------------------------------------------
+
 # Configurações da página
-# -----------------------------------------------------
 st.set_page_config(page_title="Score de Crédito", page_icon="💳", layout="wide")
 st.title("💳 Aplicativo de Escoragem de Crédito")
 st.caption("Utilize este app para escorar novas bases com o modelo treinado (`model_final.pkl`).")
 
-# -----------------------------------------------------
+
 # Funções auxiliares
-# -----------------------------------------------------
 @st.cache_resource
 def carregar_modelo(caminho_modelo: str):
     """Carrega o modelo treinado."""
@@ -45,9 +44,8 @@ def preprocessar_dados(df: pd.DataFrame):
     X_prep = pre.fit_transform(df)
     return X_prep, pre
 
-# -----------------------------------------------------
+
 # Upload de arquivo
-# -----------------------------------------------------
 st.sidebar.header("📂 Upload de Base")
 arquivo_csv = st.sidebar.file_uploader("Envie um arquivo CSV", type=["csv"])
 
@@ -63,7 +61,8 @@ if arquivo_csv is not None:
     with st.spinner("⚙️ Processando e escorando a base..."):
         X_prep, _ = preprocessar_dados(df)
         if hasattr(modelo, "predict_proba"):
-            proba = modelo.predict_proba(X_prep)[:, 1]
+            resultados = predict_model(modelo, data=df)
+            st.dataframe(resultados.head())
         else:
             proba = modelo.predict(X_prep)
 
@@ -86,4 +85,5 @@ if arquivo_csv is not None:
 
 else:
     st.info("Envie um arquivo CSV para iniciar a escoragem.")
+
 
