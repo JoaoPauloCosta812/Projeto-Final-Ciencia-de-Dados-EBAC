@@ -1,6 +1,3 @@
-# =====================================================
-# Streamlit - Escoragem de base de crédito
-# =====================================================
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -89,3 +86,4 @@ if arquivo_csv is not None:
 
 else:
     st.info("Envie um arquivo CSV para iniciar a escoragem.")
+
