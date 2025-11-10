@@ -1,4 +1,8 @@
 import streamlit as st
+st.set_option("server.fileWatcherType", "none")
+st.set_option("client.displayEnabled", True)
+
+import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -140,3 +144,4 @@ if arquivo is not None:
     )
 else:
     st.info("Envie um arquivo CSV para iniciar a escoragem.")
+
