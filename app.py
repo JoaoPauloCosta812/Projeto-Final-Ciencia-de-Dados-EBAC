@@ -1,104 +1,99 @@
 import streamlit as st
 import pandas as pd
-from pycaret.classification import load_model, predict_model
+import numpy as np
+from pycaret.classification import load_model
 
-# -----------------------------------------------------------------------------
-# CONFIGURAÇÃO DA PÁGINA
-# -----------------------------------------------------------------------------
-st.set_page_config(
-    page_title="Score de Crédito",
-    page_icon="💳",
-    layout="wide",
-)
+# ------------------------------------------------------------
+# Config da página
+# ------------------------------------------------------------
+st.set_page_config(page_title="Score de Crédito", page_icon="💳", layout="wide")
 st.title("💳 Aplicativo de Escoragem de Crédito")
-st.caption("Utilize este app para escorar novas bases com o modelo treinado (`model_final.pkl`).")
+st.caption("Use este app para escorar novas bases com o modelo treinado (`model_final.pkl`).")
 
-
-# -----------------------------------------------------------------------------
-# 1. CARREGAR MODELO TREINADO (o .pkl que você subiu pro GitHub)
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------
+# Carregar modelo (PyCaret)
+#   -> use o nome SEM extensão se o arquivo se chama model_final.pkl
+#      e está na raiz do projeto.
+# ------------------------------------------------------------
 @st.cache_resource
 def carregar_modelo():
-    # o nome tem que ser exatamente o que está no repositório
-    return load_model("model_final")
+    # Se o arquivo é 'model_final.pkl', use load_model('model_final')
+    modelo = load_model("model_final")
+    return modelo
 
 modelo = carregar_modelo()
 
-
-# -----------------------------------------------------------------------------
-# 2. FUNÇÃO DE LIMPEZA / NORMALIZAÇÃO DA BASE QUE O USUÁRIO FAZ UPLOAD
-# -----------------------------------------------------------------------------
-def preparar_base_para_score(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-
-    # 2.1 – remover colunas de índice que vieram do to_csv
-    drop_cols = [c for c in df.columns if c.lower().startswith("unnamed") or c.lower() == "index"]
-    if drop_cols:
-        df = df.drop(columns=drop_cols)
-
-    # 2.2 – no score não mandamos a resposta
-    if "mau" in df.columns:
-        df = df.drop(columns=["mau"])
-
-    # 2.3 – converter data_ref pra datetime (no treino ela existia assim)
-    if "data_ref" in df.columns:
-        df["data_ref"] = pd.to_datetime(df["data_ref"], errors="coerce")
-
-    # 2.4 – colunas numéricas que às vezes vêm com ponto e vírgula
-    colunas_numericas_suspeitas = [
-        "renda",
-        "tempo_emprego",
-        "idade",
-        "qt_pessoas_residencia",
-        "qtd_filhos",
-    ]
-    for col in colunas_numericas_suspeitas:
-        if col in df.columns:
-            # vira string, tira separador de milhar, troca vírgula por ponto e converte
-            df[col] = (
-                df[col]
-                .astype(str)
-                .str.replace(".", "", regex=False)
-                .str.replace(",", ".", regex=False)
-            )
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # 2.5 – qualquer coisa que ficar NaN a gente deixa como está; o pipeline do PyCaret lida
-    return df
-
-
-# -----------------------------------------------------------------------------
-# 3. SIDEBAR – UPLOAD
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------
+# Upload
+# ------------------------------------------------------------
 st.sidebar.header("📂 Upload de Base")
 arquivo = st.sidebar.file_uploader("Envie um arquivo CSV", type=["csv"])
 
-if arquivo is None:
-    st.info("Envie um arquivo CSV para iniciar a escoragem.")
-    st.stop()
+def _prepara_df_para_modelo(df: pd.DataFrame) -> pd.DataFrame:
+    """Ajustes mínimos para garantir compatibilidade com o pipeline salvo."""
+    df = df.copy()
 
-# -----------------------------------------------------------------------------
-# 4. LER E MOSTRAR A BASE
-# -----------------------------------------------------------------------------
-df_raw = pd.read_csv(arquivo)
-st.write("### 🧾 Amostra da base carregada:")
-st.dataframe(df_raw.head())
+    # 1) Remover target se vier por engano
+    for col in ["mau", "target", "y", "classe"]:
+        if col in df.columns:
+            df.drop(columns=[col], inplace=True)
 
+    # 2) Garantir que a coluna de data seja datetime (se existir)
+    if "data_ref" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["data_ref"]):
+        # tenta converter sem quebrar se já estiver ok
+        try:
+            df["data_ref"] = pd.to_datetime(df["data_ref"], errors="coerce")
+        except Exception:
+            pass
 
-# -----------------------------------------------------------------------------
-# 5. PREPARAR BASE E RODAR O MODELO
-# -----------------------------------------------------------------------------
-df_ready = preparar_base_para_score(df_raw)
+    # 3) Tipos categóricos como string (evita categorias “object” inconsistentes)
+    obj_cols = df.select_dtypes(include="object").columns.tolist()
+    for c in obj_cols:
+        df[c] = df[c].astype("string").str.strip()
 
-try:
-    # o predict_model do PyCaret já devolve o dataframe + colunas de previsão
-    resultados = predict_model(modelo, data=df_ready, verbose=False)
+    # 4) Opcional: alinhar colunas esperadas pelo modelo, se disponível
+    if hasattr(modelo, "feature_names_in_"):
+        cols_esperadas = list(modelo.feature_names_in_)
+        # mantém só as que existem
+        df = df[[c for c in cols_esperadas if c in df.columns]]
+        # se faltar alguma coluna esperada, cria vazia (NaN) — a pipeline tratará
+        faltantes = [c for c in cols_esperadas if c not in df.columns]
+        for c in faltantes:
+            df[c] = np.nan
+        # reordena
+        df = df[cols_esperadas]
+
+    return df
+
+if arquivo is not None:
+    df_raw = pd.read_csv(arquivo)
+    st.write("### 🧾 Amostra da base carregada:")
+    st.dataframe(df_raw.head())
+
+    with st.spinner("⚙️ Processando e escorando a base..."):
+        df = _prepara_df_para_modelo(df_raw)
+
+        # IMPORTANTÍSSIMO: usar diretamente predict / predict_proba do pipeline
+        # do PyCaret. NÃO usar predict_model(...).
+        if hasattr(modelo, "predict_proba"):
+            score = modelo.predict_proba(df)[:, 1]
+        else:
+            # fallback: alguns modelos não têm proba; usamos a classe
+            score = modelo.predict(df)
+            # normaliza para [0,1] se veio como {0,1}
+            try:
+                score = score.astype(float)
+            except Exception:
+                pass
+
+        resultados = df_raw.copy()
+        resultados["score"] = score
+        resultados["classificacao"] = np.where(resultados["score"] >= 0.5, "Aprovado", "Reprovado")
 
     st.success("✅ Escoragem concluída!")
     st.write("### 🔍 Amostra das previsões:")
     st.dataframe(resultados.head())
 
-    # botão para download
     csv_out = resultados.to_csv(index=False, encoding="utf-8-sig")
     st.download_button(
         label="📥 Baixar resultados (CSV)",
@@ -106,14 +101,5 @@ try:
         file_name="scores_resultados.csv",
         mime="text/csv",
     )
-
-except Exception as e:
-    st.error("❌ Não consegui escorar essa base com o modelo atual.")
-    st.write(
-        "Isso geralmente acontece quando **as colunas do CSV não estão no mesmo formato** "
-        "que o modelo foi treinado (ex: data como texto, coluna extra, ou target junto)."
-    )
-    st.write("**Mensagem técnica (pode mostrar pro professor):**")
-    st.code(str(e))
-    st.write("**dtypes recebidos:**")
-    st.dataframe(df_ready.dtypes)
+else:
+    st.info("Envie um arquivo CSV para iniciar a escoragem.")
