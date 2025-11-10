@@ -93,7 +93,51 @@ if arquivo is not None:
     st.success("✅ Escoragem concluída!")
     st.write("### 🔍 Amostra das previsões:")
     st.dataframe(resultados.head())
+# ------------------------------------------------------------
+# 📊 Métricas resumo
+# ------------------------------------------------------------
+col1, col2, col3 = st.columns(3)
+media_score = resultados["score"].mean()
+pct_aprov = (resultados["classificacao"] == "Aprovado").mean() * 100
+pct_reprov = (resultados["classificacao"] == "Reprovado").mean() * 100
 
+col1.metric("Score Médio", f"{media_score:.2%}")
+col2.metric("Aprovados", f"{pct_aprov:.1f}%")
+col3.metric("Reprovados", f"{pct_reprov:.1f}%")
+# ------------------------------------------------------------
+# 📊 Gráfico 1 — Distribuição dos Scores
+# ------------------------------------------------------------
+st.markdown("### 📊 Distribuição dos Scores")
+
+fig_hist = px.histogram(
+    resultados,
+    x="score",
+    nbins=30,
+    title="Distribuição das Probabilidades de Inadimplência",
+    labels={"score": "Score (probabilidade de inadimplência)", "count": "Número de clientes"},
+    color_discrete_sequence=["#00B4D8"]
+)
+fig_hist.update_layout(template="plotly_dark", bargap=0.1)
+st.plotly_chart(fig_hist, use_container_width=True)
+
+# ------------------------------------------------------------
+# ⚖️ Gráfico 2 — Proporção de Aprovação × Reprovação
+# ------------------------------------------------------------
+st.markdown("### ⚖️ Proporção de Aprovações e Reprovações")
+
+graf_counts = resultados["classificacao"].value_counts(normalize=True).mul(100).reset_index()
+graf_counts.columns = ["classificacao", "percentual"]
+
+fig_pie = px.pie(
+    graf_counts,
+    names="classificacao",
+    values="percentual",
+    title="Distribuição de Classificação dos Clientes",
+    color="classificacao",
+    color_discrete_map={"Aprovado": "#00B050", "Reprovado": "#C00000"},
+)
+fig_pie.update_traces(textinfo="percent+label")
+st.plotly_chart(fig_pie, use_container_width=True)
     csv_out = resultados.to_csv(index=False, encoding="utf-8-sig")
     st.download_button(
         label="📥 Baixar resultados (CSV)",
@@ -103,3 +147,4 @@ if arquivo is not None:
     )
 else:
     st.info("Envie um arquivo CSV para iniciar a escoragem.")
+
