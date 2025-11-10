@@ -1,13 +1,10 @@
 import os
 import streamlit as st
 
-# ===============================
-# ⚙️ Configurações fixas para evitar loop no Streamlit Cloud
-# ===============================
+# =========================================================
+# ⚙️ Evita reload contínuo no Streamlit Cloud
+# =========================================================
 os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
-st.set_option("server.fileWatcherType", "none")  # <-- corrigido (tudo minúsculo)
-st.set_option("server.runOnSave", False)
-st.set_option("client.displayEnabled", True)
 
 
 # =========================================================
@@ -166,4 +163,5 @@ if arquivo is not None:
 
 else:
     st.info("Envie um arquivo CSV para iniciar a escoragem.")
+
 
