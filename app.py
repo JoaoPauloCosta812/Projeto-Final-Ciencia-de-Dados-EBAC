@@ -13,11 +13,15 @@ st.title("💳 Aplicativo de Escoragem de Crédito")
 st.caption("Use este app para escorar novas bases com o modelo treinado (`model_final.pkl`).")
 
 # ------------------------------------------------------------
-# Caminhos organizados do projeto
+# Caminhos organizados (compatíveis com GitHub e Streamlit Cloud)
 # ------------------------------------------------------------
-BASE_PATH = Path("Projeto-Final-Ciencia-de-Dados-EBAC/data/base")
-MODELO_PATH = BASE_PATH / "model_final"
+BASE_PATH = Path(__file__).resolve().parent / "data" / "base"
+MODELO_PATH = BASE_PATH / "model_final.pkl"
 DEFAULT_CSV_PATH = BASE_PATH / "credit_scoring_para_streamlit_corrigido.csv"
+
+# Caso o CSV padrão ainda não tenha sido gerado, usa o FTR original
+if not DEFAULT_CSV_PATH.exists():
+    DEFAULT_CSV_PATH = BASE_PATH / "credit_scoring.ftr"
 
 # ------------------------------------------------------------
 # Carregar modelo
@@ -43,22 +47,17 @@ def preparar_df_para_modelo(df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df.drop(columns=[col], inplace=True)
 
-    # 2) Garantir tipo datetime
+    # 2) Converter data_ref
     if "data_ref" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["data_ref"]):
-        try:
-            df["data_ref"] = pd.to_datetime(df["data_ref"], errors="coerce")
-        except Exception:
-            pass
+        df["data_ref"] = pd.to_datetime(df["data_ref"], errors="coerce")
 
-    # 3) Converter strings
-    obj_cols = df.select_dtypes(include="object").columns.tolist()
-    for c in obj_cols:
+    # 3) Normalizar strings
+    for c in df.select_dtypes(include="object").columns:
         df[c] = df[c].astype("string").str.strip()
 
     # 4) Ajustar colunas conforme modelo
     if hasattr(modelo, "feature_names_in_"):
         cols_esperadas = list(modelo.feature_names_in_)
-        df = df[[c for c in cols_esperadas if c in df.columns]]
         faltantes = [c for c in cols_esperadas if c not in df.columns]
         for c in faltantes:
             df[c] = np.nan
@@ -67,29 +66,30 @@ def preparar_df_para_modelo(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # ------------------------------------------------------------
-# Processamento e escoragem
+# Carregar dados
 # ------------------------------------------------------------
 if arquivo is not None:
     df_raw = pd.read_csv(arquivo)
 else:
     st.sidebar.info("📄 Nenhum arquivo enviado — usando base padrão.")
-    df_raw = pd.read_csv(DEFAULT_CSV_PATH)
+    if DEFAULT_CSV_PATH.suffix == ".ftr":
+        df_raw = pd.read_feather(DEFAULT_CSV_PATH)
+    else:
+        df_raw = pd.read_csv(DEFAULT_CSV_PATH)
 
 st.write("### 🧾 Amostra da base carregada:")
 st.dataframe(df_raw.head())
 
+# ------------------------------------------------------------
+# Escoragem
+# ------------------------------------------------------------
 with st.spinner("⚙️ Processando e escorando a base..."):
     df = preparar_df_para_modelo(df_raw)
 
-    # Escorar direto com o pipeline (sem predict_model)
     if hasattr(modelo, "predict_proba"):
         score = modelo.predict_proba(df)[:, 1]
     else:
-        score = modelo.predict(df)
-        try:
-            score = score.astype(float)
-        except Exception:
-            pass
+        score = modelo.predict(df).astype(float)
 
     resultados = df_raw.copy()
     resultados["score"] = score
@@ -135,7 +135,32 @@ fig_pie.update_traces(textinfo="percent+label")
 st.plotly_chart(fig_pie, use_container_width=True)
 
 # ------------------------------------------------------------
-# 📥 Botão de download
+# 🧠 Gráfico 3 — Perfil de risco médio por tipo de renda
+# ------------------------------------------------------------
+if "tipo_renda" in resultados.columns:
+    st.markdown("### 🧠 Perfil de risco médio por tipo de renda")
+
+    risco_renda = (
+        resultados.groupby("tipo_renda", as_index=False)
+        .agg(score_medio=("score", "mean"))
+        .sort_values(by="score_medio", ascending=False)
+    )
+
+    fig_bar = px.bar(
+        risco_renda,
+        x="tipo_renda",
+        y="score_medio",
+        title="Score médio por Tipo de Renda",
+        text=risco_renda["score_medio"].apply(lambda x: f"{x:.2f}"),
+        color="score_medio",
+        color_continuous_scale="tealgrn",
+    )
+    fig_bar.update_traces(textposition="outside")
+    fig_bar.update_layout(template="plotly_dark", yaxis_title="Score médio (probabilidade de inadimplência)")
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+# ------------------------------------------------------------
+# 📥 Download dos resultados
 # ------------------------------------------------------------
 csv_out = resultados.to_csv(index=False, encoding="utf-8-sig")
 st.download_button(
