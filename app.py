@@ -1,17 +1,14 @@
-# =========================================================
-# 💳 Aplicativo de Escoragem de Crédito — versão estável (antiloop)
-# =========================================================
-
-# =========================================================
-# ⚙️ Correção definitiva para o loop infinito no Streamlit Cloud
-# =========================================================
 import os
 import streamlit as st
 
+# ===============================
+# ⚙️ Configurações fixas para evitar loop no Streamlit Cloud
+# ===============================
 os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
-st.set_option("server.fileWatcherType", "none")
+st.set_option("server.fileWatcherType", "none")  # <-- corrigido (tudo minúsculo)
 st.set_option("server.runOnSave", False)
 st.set_option("client.displayEnabled", True)
+
 
 # =========================================================
 # 📦 Imports principais
@@ -169,3 +166,4 @@ if arquivo is not None:
 
 else:
     st.info("Envie um arquivo CSV para iniciar a escoragem.")
+
