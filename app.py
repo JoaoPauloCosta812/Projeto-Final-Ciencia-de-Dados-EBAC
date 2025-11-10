@@ -13,15 +13,9 @@ st.title("💳 Aplicativo de Escoragem de Crédito")
 st.caption("Use este app para escorar novas bases com o modelo treinado (`model_final.pkl`).")
 
 # ------------------------------------------------------------
-# Caminhos (agora tudo na raiz do repositório)
+# Caminho do modelo (na raiz)
 # ------------------------------------------------------------
-BASE_PATH = Path(__file__).resolve().parent
-MODELO_PATH = BASE_PATH / "model_final.pkl"
-DEFAULT_CSV_PATH = BASE_PATH / "credit_scoring_para_streamlit_corrigido.csv"
-
-# Caso o CSV padrão não exista, tenta usar o .ftr original
-if not DEFAULT_CSV_PATH.exists():
-    DEFAULT_CSV_PATH = BASE_PATH / "credit_scoring.ftr"
+MODELO_PATH = Path(__file__).resolve().parent / "model_final.pkl"
 
 # ------------------------------------------------------------
 # Carregar modelo
@@ -31,7 +25,11 @@ def carregar_modelo():
     modelo = load_model(str(MODELO_PATH))
     return modelo
 
-modelo = carregar_modelo()
+try:
+    modelo = carregar_modelo()
+except FileNotFoundError:
+    st.error("❌ Arquivo `model_final.pkl` não encontrado na raiz do projeto.")
+    st.stop()
 
 # ------------------------------------------------------------
 # Upload de arquivo
@@ -39,6 +37,13 @@ modelo = carregar_modelo()
 st.sidebar.header("📂 Upload de Base")
 arquivo = st.sidebar.file_uploader("Envie um arquivo CSV", type=["csv"])
 
+if arquivo is None:
+    st.warning("⚠️ Envie um arquivo CSV para iniciar a escoragem.")
+    st.stop()
+
+# ------------------------------------------------------------
+# Função de preparação
+# ------------------------------------------------------------
 def preparar_df_para_modelo(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
@@ -66,17 +71,9 @@ def preparar_df_para_modelo(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # ------------------------------------------------------------
-# Carregar dados
+# Leitura da base enviada
 # ------------------------------------------------------------
-if arquivo is not None:
-    df_raw = pd.read_csv(arquivo)
-else:
-    st.sidebar.info("📄 Nenhum arquivo enviado — usando base padrão.")
-    if DEFAULT_CSV_PATH.suffix == ".ftr":
-        df_raw = pd.read_feather(DEFAULT_CSV_PATH)
-    else:
-        df_raw = pd.read_csv(DEFAULT_CSV_PATH)
-
+df_raw = pd.read_csv(arquivo)
 st.write("### 🧾 Amostra da base carregada:")
 st.dataframe(df_raw.head())
 
