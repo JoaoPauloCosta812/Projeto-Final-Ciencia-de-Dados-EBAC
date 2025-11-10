@@ -4,43 +4,54 @@ import numpy as np
 from pycaret.classification import load_model
 import plotly.express as px
 
-
+# ------------------------------------------------------------
 # Config da página
+# ------------------------------------------------------------
 st.set_page_config(page_title="Score de Crédito", page_icon="💳", layout="wide")
 st.title("💳 Aplicativo de Escoragem de Crédito")
 st.caption("Use este app para escorar novas bases com o modelo treinado (`model_final.pkl`).")
 
-
-# Cachear carregamento do modelo
+# ------------------------------------------------------------
+# Carregar modelo (cacheado)
+# ------------------------------------------------------------
 @st.cache_resource(show_spinner="Carregando modelo treinado...")
 def carregar_modelo():
-    return load_model("model_final")  # sem .pkl
+    return load_model("model_final")
 
 modelo = carregar_modelo()
 
-
-# Upload - persistir base no estado da sessão
+# ------------------------------------------------------------
+# Upload da base
+# ------------------------------------------------------------
 st.sidebar.header("📂 Upload de Base")
 arquivo = st.sidebar.file_uploader("Envie um arquivo CSV", type=["csv"])
 
-# Mantém a base carregada entre reexecuções
-if "dados_carregados" not in st.session_state:
-    st.session_state["dados_carregados"] = None
+# Inicializa estado de sessão (para evitar recarregar)
+if "uploaded_name" not in st.session_state:
+    st.session_state.uploaded_name = None
+if "dados" not in st.session_state:
+    st.session_state.dados = None
+if "resultados" not in st.session_state:
+    st.session_state.resultados = None
 
+# Lê o arquivo apenas quando um novo upload for feito
 if arquivo is not None:
-    st.session_state["dados_carregados"] = pd.read_csv(arquivo)
-    st.success("✅ Base carregada com sucesso!")
-
-df_raw = st.session_state["dados_carregados"]
-
-if df_raw is None:
+    if arquivo.name != st.session_state.uploaded_name:
+        st.session_state.uploaded_name = arquivo.name
+        st.session_state.dados = pd.read_csv(arquivo)
+        st.session_state.resultados = None  # força nova escoragem
+else:
     st.info("Envie um arquivo CSV para iniciar a escoragem.")
     st.stop()
 
+df_raw = st.session_state.dados
 
+# ------------------------------------------------------------
 # Preparar dados
+# ------------------------------------------------------------
 def _prepara_df_para_modelo(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+
     for col in ["mau", "target", "y", "classe"]:
         if col in df.columns:
             df.drop(columns=[col], inplace=True)
@@ -60,32 +71,35 @@ def _prepara_df_para_modelo(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+# ------------------------------------------------------------
+# Escoragem (cacheada manualmente)
+# ------------------------------------------------------------
+if st.session_state.resultados is None:
+    with st.spinner("⚙️ Escorando base..."):
+        df = _prepara_df_para_modelo(df_raw)
 
-# Escoragem (cacheada)
-@st.cache_data(show_spinner="⚙️ Escorando base...")
-def escorar_base(df_raw: pd.DataFrame):
-    df = _prepara_df_para_modelo(df_raw)
+        if hasattr(modelo, "predict_proba"):
+            score = modelo.predict_proba(df)[:, 1]
+        else:
+            score = modelo.predict(df).astype(float)
 
-    if hasattr(modelo, "predict_proba"):
-        score = modelo.predict_proba(df)[:, 1]
-    else:
-        score = modelo.predict(df).astype(float)
+        resultados = df_raw.copy()
+        resultados["score"] = score
+        resultados["classificacao"] = np.where(resultados["score"] >= 0.5, "Aprovado", "Reprovado")
+        st.session_state.resultados = resultados
+else:
+    resultados = st.session_state.resultados
 
-    resultados = df_raw.copy()
-    resultados["score"] = score
-    resultados["classificacao"] = np.where(resultados["score"] >= 0.5, "Aprovado", "Reprovado")
-    return resultados
-
-resultados = escorar_base(df_raw)
-
-
+# ------------------------------------------------------------
 # Exibição dos resultados
+# ------------------------------------------------------------
 st.success("✅ Escoragem concluída!")
 st.write("### 🔍 Amostra das previsões:")
 st.dataframe(resultados.head())
 
-
-# Métricas resumo
+# ------------------------------------------------------------
+# 📊 Métricas resumo
+# ------------------------------------------------------------
 col1, col2, col3 = st.columns(3)
 media_score = resultados["score"].mean()
 pct_aprov = (resultados["classificacao"] == "Aprovado").mean() * 100
@@ -95,9 +109,11 @@ col1.metric("Score Médio", f"{media_score:.2%}")
 col2.metric("Aprovados", f"{pct_aprov:.1f}%")
 col3.metric("Reprovados", f"{pct_reprov:.1f}%")
 
-
-# Gráfico 1 — Distribuição dos Scores
+# ------------------------------------------------------------
+# 📊 Gráfico 1 — Distribuição dos Scores
+# ------------------------------------------------------------
 st.markdown("### 📊 Distribuição dos Scores")
+
 fig_hist = px.histogram(
     resultados,
     x="score",
@@ -109,9 +125,11 @@ fig_hist = px.histogram(
 fig_hist.update_layout(template="plotly_dark", bargap=0.1)
 st.plotly_chart(fig_hist, use_container_width=True)
 
-
-# Gráfico 2 — Proporção de Aprovação × Reprovação
+# ------------------------------------------------------------
+# ⚖️ Gráfico 2 — Proporção de Aprovação × Reprovação
+# ------------------------------------------------------------
 st.markdown("### ⚖️ Proporção de Aprovações e Reprovações")
+
 graf_counts = resultados["classificacao"].value_counts(normalize=True).mul(100).reset_index()
 graf_counts.columns = ["classificacao", "percentual"]
 
@@ -126,8 +144,9 @@ fig_pie = px.pie(
 fig_pie.update_traces(textinfo="percent+label")
 st.plotly_chart(fig_pie, use_container_width=True)
 
-
-# Download
+# ------------------------------------------------------------
+# 📥 Download
+# ------------------------------------------------------------
 csv_out = resultados.to_csv(index=False, encoding="utf-8-sig")
 st.download_button(
     label="📥 Baixar resultados (CSV)",
