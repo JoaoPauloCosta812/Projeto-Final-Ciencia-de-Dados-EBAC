@@ -13,13 +13,13 @@ st.title("💳 Aplicativo de Escoragem de Crédito")
 st.caption("Use este app para escorar novas bases com o modelo treinado (`model_final.pkl`).")
 
 # ------------------------------------------------------------
-# Caminhos organizados (compatíveis com GitHub e Streamlit Cloud)
+# Caminhos (agora tudo na raiz do repositório)
 # ------------------------------------------------------------
-BASE_PATH = Path(__file__).resolve().parent / "data" / "base"
+BASE_PATH = Path(__file__).resolve().parent
 MODELO_PATH = BASE_PATH / "model_final.pkl"
 DEFAULT_CSV_PATH = BASE_PATH / "credit_scoring_para_streamlit_corrigido.csv"
 
-# Caso o CSV padrão ainda não tenha sido gerado, usa o FTR original
+# Caso o CSV padrão não exista, tenta usar o .ftr original
 if not DEFAULT_CSV_PATH.exists():
     DEFAULT_CSV_PATH = BASE_PATH / "credit_scoring.ftr"
 
@@ -98,6 +98,18 @@ with st.spinner("⚙️ Processando e escorando a base..."):
 st.success("✅ Escoragem concluída!")
 st.write("### 🔍 Amostra das previsões:")
 st.dataframe(resultados.head())
+
+# ------------------------------------------------------------
+# 📊 Métricas resumo
+# ------------------------------------------------------------
+col1, col2, col3 = st.columns(3)
+media_score = resultados["score"].mean()
+pct_aprov = (resultados["classificacao"] == "Aprovado").mean() * 100
+pct_reprov = (resultados["classificacao"] == "Reprovado").mean() * 100
+
+col1.metric("Score Médio", f"{media_score:.2%}")
+col2.metric("Aprovados", f"{pct_aprov:.1f}%")
+col3.metric("Reprovados", f"{pct_reprov:.1f}%")
 
 # ------------------------------------------------------------
 # 📊 Gráfico 1 — Distribuição dos Scores
