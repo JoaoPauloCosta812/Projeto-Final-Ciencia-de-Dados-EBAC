@@ -1,32 +1,23 @@
 import os
 import streamlit as st
 
-# =========================================================
-# ⚙️ Evita reload contínuo no Streamlit Cloud
-# =========================================================
+# Evita reload contínuo no Streamlit Cloud
 os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
 
-
-# =========================================================
-# 📦 Imports principais
-# =========================================================
 import pandas as pd
 import numpy as np
 import plotly.express as px
 from pycaret.classification import load_model
 
 
-# =========================================================
-# 🧭 Configuração da página
-# =========================================================
+# Configuração da página
 st.set_page_config(page_title="Score de Crédito", page_icon="💳", layout="wide")
 st.title("💳 Aplicativo de Escoragem de Crédito")
 st.caption("Use este app para escorar novas bases com o modelo treinado (`model_final.pkl`).")
 
 
-# =========================================================
-# 📥 Carregar modelo PyCaret
-# =========================================================
+
+# Carregar modelo PyCaret
 @st.cache_resource(show_spinner="🔁 Carregando modelo treinado...")
 def carregar_modelo():
     modelo = load_model("model_final")  # sem extensão .pkl
@@ -35,17 +26,12 @@ def carregar_modelo():
 
 modelo = carregar_modelo()
 
-
-# =========================================================
-# 📂 Upload do CSV
-# =========================================================
+# Upload do CSV
 st.sidebar.header("📂 Upload de Base")
 arquivo = st.sidebar.file_uploader("Envie um arquivo CSV", type=["csv"])
 
 
-# =========================================================
-# 🧹 Função auxiliar — preparar base
-# =========================================================
+# Função auxiliar — preparar base
 def preparar_dados(df: pd.DataFrame, modelo):
     df = df.copy()
 
@@ -76,9 +62,7 @@ def preparar_dados(df: pd.DataFrame, modelo):
     return df
 
 
-# =========================================================
-# 🚀 Escoragem principal
-# =========================================================
+# Escoragem principal
 if arquivo is not None:
     df_raw = pd.read_csv(arquivo)
     st.subheader("🧾 Amostra da base carregada:")
@@ -103,9 +87,8 @@ if arquivo is not None:
 
     st.success("✅ Escoragem concluída!")
 
-    # =====================================================
-    # 📊 Métricas resumo
-    # =====================================================
+
+    #  Métricas resumo
     media_score = resultados["score"].mean()
     pct_aprov = (resultados["classificacao"] == "Aprovado").mean() * 100
     pct_reprov = (resultados["classificacao"] == "Reprovado").mean() * 100
@@ -115,9 +98,8 @@ if arquivo is not None:
     col2.metric("Aprovados", f"{pct_aprov:.1f}%")
     col3.metric("Reprovados", f"{pct_reprov:.1f}%")
 
-    # =====================================================
-    # 📈 Gráfico 1 — Distribuição dos Scores
-    # =====================================================
+
+    # Gráfico 1 — Distribuição dos Scores
     st.markdown("### 📊 Distribuição dos Scores")
 
     fig_hist = px.histogram(
@@ -131,9 +113,8 @@ if arquivo is not None:
     fig_hist.update_layout(template="plotly_dark", bargap=0.1)
     st.plotly_chart(fig_hist, use_container_width=True)
 
-    # =====================================================
-    # ⚖️ Gráfico 2 — Proporção de Aprovação × Reprovação
-    # =====================================================
+
+    #  Gráfico 2 — Proporção de Aprovação × Reprovação
     st.markdown("### ⚖️ Proporção de Aprovações e Reprovações")
 
     graf_counts = resultados["classificacao"].value_counts(normalize=True).mul(100).reset_index()
@@ -150,9 +131,8 @@ if arquivo is not None:
     fig_pie.update_traces(textinfo="percent+label")
     st.plotly_chart(fig_pie, use_container_width=True)
 
-    # =====================================================
-    # 💾 Botão para download dos resultados
-    # =====================================================
+
+    # Botão para download dos resultados
     csv_out = resultados.to_csv(index=False, encoding="utf-8-sig")
     st.download_button(
         label="📥 Baixar resultados (CSV)",
@@ -163,5 +143,6 @@ if arquivo is not None:
 
 else:
     st.info("Envie um arquivo CSV para iniciar a escoragem.")
+
 
 
